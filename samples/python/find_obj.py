@@ -6,9 +6,9 @@ Feature-based image matching sample.
 Note, that you will need the https://github.com/opencv/opencv_contrib repo for SIFT and SURF
 
 USAGE
-  find_obj.py [--feature=<sift|surf|orb|akaze|brisk>[-flann]] [ <image1> <image2> ]
+  find_obj.py [--feature=<sift|surf|orb|akaze|brisk|latch>[-flann]] [ <image1> <image2> ]
 
-  --feature  - Feature to use. Can be sift, surf, orb or brisk. Append '-flann'
+  --feature  - Feature to use. Can be sift, surf, orb, latch or brisk. Append '-flann'
                to feature name to use Flann-based matcher instead bruteforce.
 
   Press left mouse button on a feature point to see its matching point.
@@ -28,19 +28,24 @@ FLANN_INDEX_LSH    = 6
 def init_feature(name):
     chunks = name.split('-')
     if chunks[0] == 'sift':
-        detector = cv2.xfeatures2d.SIFT_create()
+        detector = descriptor = cv2.xfeatures2d.SIFT_create()
         norm = cv2.NORM_L2
     elif chunks[0] == 'surf':
-        detector = cv2.xfeatures2d.SURF_create(800)
+        detector = descriptor = cv2.xfeatures2d.SURF_create(800)
         norm = cv2.NORM_L2
     elif chunks[0] == 'orb':
-        detector = cv2.ORB_create(400)
+        detector = descriptor = cv2.ORB_create(400)
         norm = cv2.NORM_HAMMING
     elif chunks[0] == 'akaze':
-        detector = cv2.AKAZE_create()
+        detector = descriptor = cv2.AKAZE_create()
         norm = cv2.NORM_HAMMING
     elif chunks[0] == 'brisk':
+        detector = descriptor = cv2.BRISK_create()
+        norm = cv2.NORM_HAMMING
+    elif chunks[0] == 'latch':
         detector = cv2.BRISK_create()
+        #detector = cv2.xfeatures2d.SIFT_create()
+        descriptor = cv2.xfeatures2d.LATCH_create()
         norm = cv2.NORM_HAMMING
     else:
         return None, None
@@ -55,7 +60,7 @@ def init_feature(name):
         matcher = cv2.FlannBasedMatcher(flann_params, {})  # bug : need to pass empty dict (#1329)
     else:
         matcher = cv2.BFMatcher(norm)
-    return detector, matcher
+    return detector, descriptor, matcher
 
 
 def filter_matches(kp1, kp2, matches, ratio = 0.75):
@@ -152,7 +157,7 @@ if __name__ == '__main__':
 
     img1 = cv2.imread(fn1, 0)
     img2 = cv2.imread(fn2, 0)
-    detector, matcher = init_feature(feature_name)
+    detector, descriptor, matcher = init_feature(feature_name)
 
     if img1 is None:
         print('Failed to load fn1:', fn1)
@@ -168,8 +173,15 @@ if __name__ == '__main__':
 
     print('using', feature_name)
 
-    kp1, desc1 = detector.detectAndCompute(img1, None)
-    kp2, desc2 = detector.detectAndCompute(img2, None)
+    if detector is descriptor:
+        kp1, desc1 = detector.detectAndCompute(img1, None)
+        kp2, desc2 = detector.detectAndCompute(img2, None)
+    else:
+        kp1 = detector.detect(img1, None)
+        kp1, desc1 = descriptor.compute(img1, kp1)
+        kp2 = detector.detect(img2, None)
+        kp2, desc2 = descriptor.compute(img2, kp2)
+
     print('img1 - %d features, img2 - %d features' % (len(kp1), len(kp2)))
 
     def match_and_draw(win):

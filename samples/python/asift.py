@@ -66,7 +66,7 @@ def affine_skew(tilt, phi, img, mask=None):
     return img, mask, Ai
 
 
-def affine_detect(detector, img, mask=None, pool=None):
+def affine_detect(detector, descriptor, img, mask=None, pool=None):
     '''
     affine_detect(detector, img, mask=None, pool=None) -> keypoints, descrs
 
@@ -84,7 +84,11 @@ def affine_detect(detector, img, mask=None, pool=None):
     def f(p):
         t, phi = p
         timg, tmask, Ai = affine_skew(t, phi, img)
-        keypoints, descrs = detector.detectAndCompute(timg, tmask)
+        if detector is descriptor:
+            keypoints, descrs = detector.detectAndCompute(timg, tmask)
+        else:
+            keypoints = detector.detect(timg, tmask)
+            keypoints, descrs = descriptor.compute(timg, keypoints)
         for kp in keypoints:
             x, y = kp.pt
             kp.pt = tuple( np.dot(Ai, (x, y, 1)) )
@@ -121,7 +125,7 @@ if __name__ == '__main__':
 
     img1 = cv2.imread(fn1, 0)
     img2 = cv2.imread(fn2, 0)
-    detector, matcher = init_feature(feature_name)
+    detector, descriptor, matcher = init_feature(feature_name)
 
     if img1 is None:
         print('Failed to load fn1:', fn1)
@@ -138,8 +142,8 @@ if __name__ == '__main__':
     print('using', feature_name)
 
     pool=ThreadPool(processes = cv2.getNumberOfCPUs())
-    kp1, desc1 = affine_detect(detector, img1, pool=pool)
-    kp2, desc2 = affine_detect(detector, img2, pool=pool)
+    kp1, desc1 = affine_detect(detector, descriptor, img1, pool=pool)
+    kp2, desc2 = affine_detect(detector, descriptor, img2, pool=pool)
     print('img1 - %d features, img2 - %d features' % (len(kp1), len(kp2)))
 
     def match_and_draw(win):
